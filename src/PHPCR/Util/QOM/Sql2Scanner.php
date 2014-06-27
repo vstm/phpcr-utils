@@ -154,23 +154,130 @@ class Sql2Scanner
     protected function scan($sql2)
     {
         $tokens = array();
-        $token = strtok($sql2, " \n\t");
-        while ($token !== false) {
-            $this->tokenize($tokens, $token);
-            $token = strtok(" \n\t");
-        }
 
-        $regexp = '';
-        foreach ($tokens as $token) {
-            $regexp[] = preg_quote($token, '/');
-        }
+        $readOffset = 0;
+        $sql2Length = strlen($sql2);
 
-        $regexp = '/^'.implode('([ \t\n]+)', $regexp).'$/';
-        preg_match($regexp, $sql2, $this->delimiters);
-        $this->delimiters[0] = '';
+        // read until end-of-string
+        while ($readOffset < $sql2Length) {
+            // skip whitespace
+            $wsLen = strspn($sql2, " \n\r\t", $readOffset);
+            if ($wsLen > 0) {
+                $this->delimiters[] = substr($sql2, $readOffset, $wsLen);
+            }
+            $readOffset += $wsLen;
+
+            if ($readOffset >= $sql2Length) {
+                break;
+            }
+
+
+            $currentChar = substr($sql2, $readOffset, 1);
+            if (strpos('0123456789', $currentChar) !== false) {
+                $readOffset = $this->scanNumber($sql2, $readOffset, $tokens);
+            } elseif ($currentChar === '"' || $currentChar === '\'') {
+                $readOffset = $this->scanString($sql2, $readOffset, $tokens);
+            } elseif (strpos('/-(){}*,.;+%?', $currentChar) !== false) {
+                ++$readOffset;
+                $tokens[] = $currentChar;
+            } elseif (strpos('!<>|=:', $currentChar) !== false) {
+                if(($readOffset + 1) < $sql2Length &&
+                    strpos('=|>', substr($sql2, $readOffset + 1, 1))) {
+                    $tokens[] = substr($sql2, $readOffset, 2);
+                    $readOffset += 2;
+                } else {
+                    ++$readOffset;
+                    $tokens[] = $currentChar;
+                }
+            } elseif ($currentChar === '[') {
+                $readOffset = $this->scanQuotedIdentifier($sql2, $readOffset, $tokens);
+            } elseif ($currentChar !== '' && $currentChar !== false) {
+                $readOffset = $this->scanIdentifier($sql2, $readOffset, $tokens);
+            }
+        }
 
         return $tokens;
     }
+
+    protected function scanNumber($sql2, $readOffset, &$tokens) {
+        $sql2Length = strlen($sql2);
+        $newOffset = $readOffset;
+        $newOffset += strspn($sql2, "0123456789", $readOffset);
+
+        if (($newOffset + 1) < $sql2Length && '.' === substr($sql2, $newOffset, 1)) {
+            ++$newOffset;
+            $newOffset += strspn($sql2, "0123456789", $readOffset);
+        }
+
+        $expChar = substr($sql2, $newOffset, 1);
+
+        if ('E' === $expChar || 'e' === $expChar) {
+            ++$newOffset;
+            $newOffset += strspn($sql2, "0123456789", $readOffset);
+        }
+
+        $tokens[] = substr($sql2, $readOffset, $newOffset - $readOffset);
+
+        return $newOffset;
+    }
+
+    protected function scanString($sql2, $readOffset, &$tokens) {
+        $sql2Length = strlen($sql2);
+
+        $stringChar = substr($sql2, $readOffset++, 1);
+        $result = $stringChar;
+        while ($readOffset < $sql2Length) {
+            $current = substr($sql2, $readOffset++, 1);
+            if ($stringChar === $current) {
+                $result .= $current;
+                $tokens[] = $result;
+                break;
+            } elseif('\\' == $current &&
+                $stringChar == substr($sql2, $readOffset, 1)) {
+                $result .= substr($sql2, $readOffset, 1);
+                ++$readOffset;
+            } else {
+                $result .= $current;
+            }
+        }
+
+        return $readOffset;
+    }
+
+    protected function scanIdentifier($sql2, $readOffset, &$tokens) {
+        $identifierLen = strcspn($sql2, " \n\r\t[]/-(){}*,.;+%?!<>|=:", $readOffset);
+
+        $tokens[] = substr($sql2, $readOffset, $identifierLen);
+
+        return $readOffset + $identifierLen;
+    }
+
+    protected function scanQuotedIdentifier($sql2, $readOffset, &$tokens) {
+        $newOffset = $readOffset + 1;
+        $sql2Length = strlen($sql2);
+
+        $level = 1;
+        while($newOffset < $sql2Length) {
+            $newOffset += strcspn($sql2, "[]", $newOffset);
+
+            if($newOffset < $sql2Length) {
+                //++$newOffset;
+                $current = substr($sql2, $newOffset, 1);
+
+                if(']' === $current && --$level <= 0) {
+                    ++$newOffset;
+                    $tokens[] = substr($sql2, $readOffset, $newOffset - $readOffset);
+                    break;
+                } elseif('[' === $current) {
+                    ++$level;
+                }
+            }
+        }
+
+        return $newOffset;
+    }
+
+
 
     /**
      * Tokenize a string returned by strtok to split the string at '.', ',', '(', '='

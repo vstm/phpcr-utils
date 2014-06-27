@@ -797,20 +797,7 @@ class Sql2ToQomQueryConverter
         }
 
         if ($quoteString) {
-            while (substr($token, -1) !== $quoteString) {
-                $nextToken = $this->scanner->fetchNextToken();
-                if ('' === $nextToken) {
-                    break;
-                }
-                $token .= $this->scanner->getPreviousDelimiter();
-                $token .= $nextToken;
-            }
-
-            if (substr($token, -1) !== $quoteString) {
-                throw new InvalidQueryException("Syntax error: unterminated quoted string $token in '{$this->sql2}'");
-            }
             $token = substr($token, 1, -1);
-            $token = str_replace('\\'.$quoteString, $quoteString, $token);
             if (preg_match('/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d+)?$/', $token)) {
                 if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $token)) {
                     $token.= ' 00:00:00';
