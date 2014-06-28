@@ -226,11 +226,14 @@ class Sql2Scanner
 
         $stringChar = substr($sql2, $readOffset++, 1);
         $result = $stringChar;
+        $terminatedString = false;
+
         while ($readOffset < $sql2Length) {
             $current = substr($sql2, $readOffset++, 1);
             if ($stringChar === $current) {
                 $result .= $current;
                 $tokens[] = $result;
+                $terminatedString = true;
                 break;
             } elseif('\\' == $current &&
                 $stringChar == substr($sql2, $readOffset, 1)) {
@@ -239,6 +242,10 @@ class Sql2Scanner
             } else {
                 $result .= $current;
             }
+        }
+
+        if(!$terminatedString) {
+            throw new InvalidQueryException("Syntax error: unterminated quoted string '{$result}' in '{$sql2}'");
         }
 
         return $readOffset;
