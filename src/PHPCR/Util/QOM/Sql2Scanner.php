@@ -202,18 +202,18 @@ class Sql2Scanner
     protected function scanNumber($sql2, $readOffset, &$tokens) {
         $sql2Length = strlen($sql2);
         $newOffset = $readOffset;
-        $newOffset += strspn($sql2, "0123456789", $readOffset);
+        $newOffset += strspn($sql2, '0123456789', $readOffset);
 
         if (($newOffset + 1) < $sql2Length && '.' === substr($sql2, $newOffset, 1)) {
             ++$newOffset;
-            $newOffset += strspn($sql2, "0123456789", $readOffset);
+            $newOffset += strspn($sql2, '0123456789', $newOffset);
         }
 
         $expChar = substr($sql2, $newOffset, 1);
 
         if ('E' === $expChar || 'e' === $expChar) {
             ++$newOffset;
-            $newOffset += strspn($sql2, "0123456789", $readOffset);
+            $newOffset += strspn($sql2, '0123456789', $newOffset);
         }
 
         $tokens[] = substr($sql2, $readOffset, $newOffset - $readOffset);
